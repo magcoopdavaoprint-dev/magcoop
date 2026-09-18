@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel — MAGCOOP</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <style>
+        * {margin:0; padding:0; box-sizing:border-box; font-family:Arial, sans-serif;}
+        body {background:#f0f4f8; padding:30px;}
+        .container {max-width:700px; margin:0 auto;}
+        .header {text-align:center; margin-bottom:30px;}
+        .logo-text {font-size:36px; font-weight:900; letter-spacing:2px; margin-bottom:10px;}
+        .mag {color:#003399;} .coop {color:#ffcc00;}
+        .page-title {font-size:24px; color:#333; margin-top:10px;}
+        .serving-box {background:white; border-radius:8px; padding:25px; margin-bottom:25px; box-shadow:0 4px 12px rgba(0,0,0,0.1); text-align:center;}
+        .serving-label {font-size:16px; color:#666; margin-bottom:10px;}
+        .serving-name {font-size:42px; font-weight:bold; color:#003399; text-transform:uppercase;}
+        .controls {display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;}
+        button {padding:18px 24px; font-size:18px; font-weight:bold; border:none; border-radius:8px; cursor:pointer; transition:0.2s;}
+        .btn-next {background:#003399; color:white;}
+        .btn-next:hover {background:#002266;}
+        .btn-reset {background:#e63946; color:white;}
+        .btn-reset:hover {background:#c1121f;}
+        .hint {text-align:center; color:#28a745; font-size:14px; margin-bottom:25px; font-weight:bold;}
+        .waiting-box {background:white; border-radius:8px; padding:25px; box-shadow:0 4px 12px rgba(0,0,0,0.1);}
+        .waiting-header {font-size:22px; font-weight:bold; color:#003399; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;}
+        .count-badge {background:#003399; color:white; padding:6px 14px; border-radius:20px; font-size:18px;}
+        .waiting-item {padding:14px 15px; border-bottom:1px solid #eee; font-size:18px; text-transform:uppercase; display:flex; justify-content:space-between; align-items:center;}
+        .waiting-item:last-child {border-bottom:none;}
+        .empty-msg {color:#999; font-style:italic; text-align:center; padding:25px;}
+        .status-msg {text-align:center; margin:15px 0; padding:10px; border-radius:6px; font-weight:bold;}
+        .status-msg.success {background:#e6ffed; color:#008833;}
+        .status-msg.error {background:#ffe6e6; color:#cc0000;}
+        .links {margin-top:25px; text-align:center;}
+        .links a {color:#003399; font-weight:bold; text-decoration:none; margin:0 10px;}
+        @media (max-width:500px) {.controls {grid-template-columns:1fr;}}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="logo-text"><span class="mag">MAG</span><span class="coop">COOP</span></h1>
+            <p class="page-title">🔐 ADMIN PANEL</p>
+        </div>
+
+        <div class="status-msg" id="connection-status">⏳ Connecting...</div>
+
+        <div class="serving-box">
+            <div class="serving-label">CURRENTLY SERVING</div>
+            <div class="serving-name" id="admin-serving">—</div>
+        </div>
+
+        <div class="controls">
+            <button class="btn-next" id="next-button">▶ CALL NEXT</button>
+            <button class="btn-reset" id="reset-button">🗑️ RESET ALL</button>
+        </div>
+        <p class="hint">🔊 Announcement plays from Main Display automatically</p>
+
+        <div class="waiting-box">
+            <div class="waiting-header">
+                Waiting List
+                <span class="count-badge" id="wait-count">0</span>
+            </div>
+            <div id="waiting-names">
+                <div class="empty-msg">No one in queue yet</div>
+            </div>
+        </div>
+
+        <div class="links">
+            <a href="index.html" target="_blank">📺 Main Display</a>
+            <a href="form.html" target="_blank">➕ Add Names</a>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 🔑 PASTE YOUR SUPABASE DETAILS HERE!
+        const SUPABASE_URL = "https://cobuvcgxuumcdrolwqpj.supabase.co/rest/v1/"; 
+
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvYnV2Y2d4dXVtY2Ryb2x3cXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MTM5ODQsImV4cCI6MjEwNTI4OTk4NH0.kr0W6U4Fpk44KMsaL-_GdoACP_toDMu_vN1k9qtgTCo";
+        // ==========================================
+
+        const { createClient } = supabase;
+        const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let queue = [];
+        let servingName = null;
+
+        async function loadQueue() {
+            const { data, error } = await supabase
+                .from('queue')
+                .select('*')
+                .order('id', { ascending: true });
+
+            if (error) {
+                showStatus("❌ Error loading data", "error");
+                return;
+            }
+            queue = data;
+            updateDisplay();
+        }
+
+        async function loadServingStatus() {
+            const { data } = await supabase
+                .from('serving_status')
+                .select('current_name')
+                .eq('id', 1)
+                .single();
+
+            if (data) {
+                servingName = data.current_name;
+                document.getElementById('admin-serving').textContent = servingName || "—";
+            }
+        }
+
+        // CALL NEXT — Move first person to serving
+        document.getElementById('next-button').addEventListener('click', async () => {
+            if (queue.length === 0) {
+                alert("No one is waiting!");
+                return;
+            }
+
+            const firstPerson = queue[0];
+            const newServingName = firstPerson.name;
+
+            // Remove from queue
+            const { error: deleteError } = await supabase
+                .from('queue')
+                .delete()
+                .eq('id', firstPerson.id);
+
+            if (deleteError) {
+                showStatus("❌ Failed to update", "error");
+                return;
+            }
+
+            // Update serving status — triggers voice on main page
+            const { error: updateError } = await supabase
+                .from('serving_status')
+                .update({ current_name: newServingName, updated_at: new Date() })
+                .eq('id', 1);
+
+            if (updateError) {
+                showStatus("❌ Failed to update status", "error");
+                return;
+            }
+
+            showStatus("✅ Now serving: " + newServingName, "success");
+            setTimeout(loadQueue, 300);
+        });
+
+        // RESET ALL — Clear queue + serving name
+        document.getElementById('reset-button').addEventListener('click', async () => {
+            if (!confirm("⚠️ CLEAR EVERYTHING?\nQueue + Current Name will be reset!")) return;
+
+            // Clear queue
+            await supabase.from('queue').delete().neq('id', 0);
+            
+            // Clear serving name
+            await supabase
+                .from('serving_status')
+                .update({ current_name: null, updated_at: new Date() })
+                .eq('id', 1);
+
+            showStatus("✅ All reset", "success");
+            setTimeout(loadQueue, 300);
+        });
+
+        function updateDisplay() {
+            document.getElementById('wait-count').textContent = queue.length;
+            document.getElementById('admin-serving').textContent = servingName || "—";
+            
+            const listEl = document.getElementById('waiting-names');
+            if (queue.length === 0) {
+                listEl.innerHTML = '<div class="empty-msg">No one in queue yet</div>';
+            } else {
+                listEl.innerHTML = queue.map((item, i) => 
+                    `<div class="waiting-item">
+                        <span>${i+1}. ${item.name}</span>
+                    </div>`
+                ).join('');
+            }
+        }
+
+        function showStatus(msg, type) {
+            const el = document.getElementById('connection-status');
+            el.textContent = msg;
+            el.className = 'status-msg ' + type;
+            setTimeout(() => el.textContent = '', 4000);
+        }
+
+        // Real-time auto-refresh
+        supabase
+            .channel('queue-changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'queue' }, loadQueue)
+            .subscribe();
+
+        supabase
+            .channel('serving-changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'serving_status' }, loadServingStatus)
+            .subscribe();
+
+        window.onload = async () => {
+            await loadQueue();
+            await loadServingStatus();
+            document.getElementById('connection-status').textContent = "✅ Connected to Database";
+            document.getElementById('connection-status').className = "status-msg success";
+        };
+    </script>
+</body>
+</html>

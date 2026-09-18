@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Queue — MAGCOOP</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <style>
+        * {margin:0; padding:0; box-sizing:border-box; font-family:Arial, sans-serif;}
+        body {background:linear-gradient(135deg, #003399, #004de6); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;}
+        .card {background:white; border-radius:12px; padding:35px 25px; width:100%; max-width:420px; box-shadow:0 6px 24px rgba(0,0,0,0.25);}
+        .logo {text-align:center; margin-bottom:30px;}
+        .logo-text {font-size:36px; font-weight:900;}
+        .mag {color:#003399;} .coop {color:#ffcc00;}
+        h2 {text-align:center; color:#333; margin-bottom:25px; font-size:22px;}
+        label {display:block; margin-bottom:10px; font-weight:bold; color:#444; font-size:16px;}
+        input {width:100%; padding:16px; font-size:18px; border:2px solid #ddd; border-radius:8px; margin-bottom:25px; text-transform:uppercase;}
+        input:focus {outline:none; border-color:#003399; box-shadow:0 0 0 3px rgba(0,51,153,0.1);}
+        button {width:100%; padding:16px; font-size:18px; font-weight:bold; background:#28a745; color:white; border:none; border-radius:8px; cursor:pointer; transition:0.2s;}
+        button:hover {background:#218838; transform:scale(1.02);}
+        .success {display:none; text-align:center; padding:20px 10px;}
+        .success h3 {color:#28a745; margin-bottom:12px; font-size:24px;}
+        .status {margin-top:15px; font-size:14px; color:#28a745; text-align:center; min-height:20px; font-weight:bold;}
+        .back-link {display:block; text-align:center; margin-top:20px; color:#003399; text-decoration:none; font-weight:bold;}
+        .error-text {color:#dc3545; margin-top:10px; text-align:center; display:none;}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo">
+            <h1 class="logo-text"><span class="mag">MAG</span><span class="coop">COOP</span></h1>
+        </div>
+        <div id="form-view">
+            <h2>Join the Queue</h2>
+            <label for="fullname">Your Full Name</label>
+            <input type="text" id="fullname" placeholder="ENTER YOUR NAME..." autocomplete="off">
+            <button id="submit-btn">Submit to Queue</button>
+            <p class="status" id="status-msg"></p>
+            <p class="error-text" id="error-msg"></p>
+        </div>
+        <div class="success" id="done-view">
+            <h3>✅ ADDED!</h3>
+            <p>Your name is in the queue.<br>Please wait to be called.</p>
+            <br>
+            <button onclick="resetForm()">Add Another Person</button>
+        </div>
+        <a href="index.html" class="back-link">← Back to Main Display</a>
+    </div>
+
+    <script>
+        // ==========================================
+        // 🔑 PASTE YOUR SUPABASE DETAILS HERE!
+       const SUPABASE_URL = "https://cobuvcgxuumcdrolwqpj.supabase.co/rest/v1/"; 
+
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvYnV2Y2d4dXVtY2Ryb2x3cXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MTM5ODQsImV4cCI6MjEwNTI4OTk4NH0.kr0W6U4Fpk44KMsaL-_GdoACP_toDMu_vN1k9qtgTCo";
+        // ==========================================
+
+        const { createClient } = supabase;
+        const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const nameInput = document.getElementById('fullname');
+        
+        // Auto-UPPERCASE as you type
+        nameInput.addEventListener('input', function() {
+            const start = this.selectionStart;
+            const end = this.selectionEnd;
+            this.value = this.value.toUpperCase();
+            this.setSelectionRange(start, end);
+        });
+
+        document.getElementById('submit-btn').addEventListener('click', addName);
+        nameInput.addEventListener('keypress', e => {
+            if (e.key === 'Enter') addName();
+        });
+
+        async function addName() {
+            const name = nameInput.value.trim();
+            const statusEl = document.getElementById('status-msg');
+            const errorEl = document.getElementById('error-msg');
+            
+            if (!name) {
+                statusEl.textContent = "⚠️ PLEASE ENTER YOUR NAME";
+                statusEl.style.color = "#dc3545";
+                return;
+            }
+
+            statusEl.textContent = "⏳ Submitting...";
+            statusEl.style.color = "#003399";
+            errorEl.style.display = "none";
+
+            const { error } = await supabase
+                .from('queue')
+                .insert([{ name: name.toUpperCase() }]);
+
+            if (error) {
+                statusEl.textContent = "❌ Failed to add";
+                statusEl.style.color = "#dc3545";
+                errorEl.textContent = error.message;
+                errorEl.style.display = "block";
+                return;
+            }
+
+            // Success
+            document.getElementById('form-view').style.display = 'none';
+            document.getElementById('done-view').style.display = 'block';
+        }
+
+        function resetForm() {
+            document.getElementById('form-view').style.display = 'block';
+            document.getElementById('done-view').style.display = 'none';
+            nameInput.value = '';
+            document.getElementById('status-msg').textContent = '';
+            document.getElementById('error-msg').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

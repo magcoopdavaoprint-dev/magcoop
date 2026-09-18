@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAGCOOP — Main Display</title>
+    <!-- Supabase Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <style>
+        * {margin:0; padding:0; box-sizing:border-box; font-family:Arial, sans-serif;}
+        body {background:#f0f4f8; padding:20px;}
+        .container {max-width:1300px; margin:0 auto;}
+        .logo-text {font-size:48px; font-weight:900; letter-spacing:2px; margin-bottom:30px; text-align:center;}
+        .mag {color:#003399;} .coop {color:#ffcc00;}
+        .main-grid {display:grid; grid-template-columns:420px 1fr; gap:25px;}
+        .panel {display:flex; flex-direction:column; gap:15px;}
+        
+        .enable-box {background:#fff3cd; border:2px solid #ffc107; border-radius:8px; padding:20px; text-align:center; margin-bottom:15px;}
+        .enable-btn {background:#28a745; color:white; border:none; padding:14px 30px; font-size:18px; font-weight:bold; border-radius:6px; cursor:pointer;}
+        .enable-btn:hover {background:#218838;}
+        
+        .status-box {border-radius:6px; padding:12px; font-size:15px; font-weight:bold; text-align:center; background:#e6ffed; color:#008833; border:2px solid #00cc44;}
+        .serving-box {border-radius:8px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.15);}
+        .serving-header {background:#003399; color:white; padding:18px 25px; font-size:26px; font-weight:bold; text-align:center;}
+        .serving-body {background:#ffcc00; color:#003399; padding:50px 25px; min-height:220px; display:flex; flex-direction:column; justify-content:center; text-align:center;}
+        .customer-name {font-size:64px; font-weight:bold; margin-bottom:15px; word-break:break-word; text-transform:uppercase;}
+        .serving-desc {font-size:22px; font-weight:500;}
+        .qr-box {background:white; border-radius:8px; padding:20px; text-align:center; box-shadow:0 2px 10px rgba(0,0,0,0.08);}
+        .qr-title {font-size:18px; font-weight:bold; color:#003399; margin-bottom:10px;}
+        #qr-canvas {max-width:200px; margin:0 auto;}
+        .qr-note {margin-top:8px; font-size:13px; color:#666;}
+        .link-box {background:white; border-radius:8px; padding:15px; text-align:center; box-shadow:0 2px 10px rgba(0,0,0,0.08);}
+        .link-box a {color:#003399; font-weight:bold; text-decoration:none; margin:0 8px;}
+        .voice-indicator {margin-top:10px; font-size:14px; color:#555; padding:10px; background:#f5f5f5; border-radius:4px; text-align:center; font-weight:bold;}
+        .image-container {border:8px solid #ffcc00; border-radius:8px; overflow:hidden; min-height:500px; box-shadow:0 4px 12px rgba(0,0,0,0.1);}
+        .image-container img {width:100%; height:100%; object-fit:cover;}
+        .hidden {display:none !important;}
+        @media (max-width:900px) {.main-grid {grid-template-columns:1fr;}}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="logo-text"><span class="mag">MAG</span><span class="coop">COOP</span></h1>
+
+        <div class="enable-box" id="voice-prompt">
+            <h3>🔊 CLICK TO ENABLE ANNOUNCEMENTS</h3>
+            <button class="enable-btn" id="enable-voice-btn">✅ TURN ON SPEAKER</button>
+        </div>
+
+        <div class="main-grid">
+            <div class="panel">
+                <div class="status-box" id="system-status">✅ Connected — Waiting for names</div>
+                <div class="serving-box">
+                    <div class="serving-header">NOW SERVING</div>
+                    <div class="serving-body">
+                        <div class="customer-name" id="customer-name">—</div>
+                        <div class="serving-desc">Proceed to Encoder</div>
+                    </div>
+                </div>
+                <div class="voice-indicator" id="voice-status">🔊 Speaker: Ready</div>
+                <div class="qr-box">
+                    <div class="qr-title">📱 Scan to Add Name</div>
+                    <canvas id="qr-canvas"></canvas>
+                    <p class="qr-note">form.html • admin.html to manage</p>
+                </div>
+                <div class="link-box">
+                    <a href="form.html" target="_blank">➕ Add Names</a>
+                    <a href="admin.html" target="_blank">🔐 Admin Panel</a>
+                </div>
+            </div>
+            <div class="image-container">
+                <img src="port-area.jpg" alt="Service Area">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 🔑 PASTE YOUR SUPABASE DETAILS HERE!
+        const SUPABASE_URL = "https://cobuvcgxuumcdrolwqpj.supabase.co/rest/v1/"; 
+
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNvYnV2Y2d4dXVtY2Ryb2x3cXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MTM5ODQsImV4cCI6MjEwNTI4OTk4NH0.kr0W6U4Fpk44KMsaL-_GdoACP_toDMu_vN1k9qtgTCo";
+        // ==========================================
+
+        const { createClient } = supabase;
+        const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const VOICE_SPEED = 1.2;
+        let servingName = null;
+        let lastSpokenName = "";
+        let voiceEnabled = false;
+
+        // Unlock voice
+        document.getElementById('enable-voice-btn').addEventListener('click', function() {
+            voiceEnabled = true;
+            const test = new SpeechSynthesisUtterance("Speaker ready");
+            test.volume = 0.8;
+            test.rate = VOICE_SPEED;
+            window.speechSynthesis.speak(test);
+            document.getElementById('voice-prompt').classList.add('hidden');
+            document.getElementById('system-status').textContent = "✅ LIVE — Ready to announce";
+        });
+
+        function speakAnnouncement(name) {
+            if (!voiceEnabled) return;
+            if (!window.speechSynthesis) return;
+
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(
+                `Now serving, ${name}. Please proceed to Encoder.`
+            );
+            utterance.rate = VOICE_SPEED;
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+            utterance.onstart = () => {
+                document.getElementById('voice-status').textContent = "🔊 SPEAKING: " + name;
+            };
+            utterance.onend = () => {
+                document.getElementById('voice-status').textContent = "🔊 Speaker: Ready";
+            };
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // Listen for REAL-TIME updates
+        async function loadServingStatus() {
+            const { data } = await supabase
+                .from('serving_status')
+                .select('current_name')
+                .eq('id', 1)
+                .single();
+
+            if (data) {
+                const newName = data.current_name;
+                if (newName !== servingName) {
+                    servingName = newName;
+                    document.getElementById('customer-name').textContent = newName || "—";
+                    lastSpokenName = ""; // Reset so it speaks fresh
+                    if (newName && newName !== lastSpokenName) {
+                        lastSpokenName = newName;
+                        speakAnnouncement(newName);
+                    }
+                }
+            }
+        }
+
+        // Real-time subscription
+        supabase
+            .channel('serving-changes')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'serving_status' },
+                loadServingStatus
+            )
+            .subscribe();
+
+        function makeQR() {
+            if (!window.QRCode) { setTimeout(makeQR, 500); return; }
+            const base = window.location.href;
+            QRCode.toCanvas(document.getElementById('qr-canvas'), base.replace('index.html', 'form.html'), {
+                width: 200, margin: 2, color: {dark:'#003399', light:'#fff'}
+            });
+        }
+
+        window.onload = () => {
+            loadServingStatus();
+            makeQR();
+        };
+    </script>
+</body>
+</html>
